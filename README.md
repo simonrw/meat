@@ -12,7 +12,7 @@ It shows you the meat.
 Install with:
 
 ```
-go install meat.dev/cmd/meat@latest
+go install github.com/simonrw/meat/cmd/meat@latest
 ```
 
 Run with `meat` to review the latest commit.

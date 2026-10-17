@@ -22,7 +22,7 @@ func TestInstalledBinaryName(t *testing.T) {
 	}
 
 	gobin := t.TempDir()
-	cmd := exec.Command(goBin, "install", "meat.dev/cmd/meat")
+	cmd := exec.Command(goBin, "install", "github.com/simonrw/meat/cmd/meat")
 	cmd.Env = append(os.Environ(), "GOBIN="+gobin)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("go install failed: %v\n%s", err, out)

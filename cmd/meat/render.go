@@ -8,7 +8,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"meat.dev/meat"
+	"github.com/simonrw/meat/meat"
 )
 
 // jsonResult is the -json wire form: the Result plus the machine-computed

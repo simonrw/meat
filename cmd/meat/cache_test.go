@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"meat.dev/meat"
+	"github.com/simonrw/meat/meat"
 )
 
 func TestCacheKeyDependsOnDiffModelAndRubric(t *testing.T) {

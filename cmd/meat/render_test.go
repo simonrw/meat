@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"meat.dev/meat"
+	"github.com/simonrw/meat/meat"
 )
 
 // plainP is the empty (no-color) palette; coloredP fakes git-resolved colors
