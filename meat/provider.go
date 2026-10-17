@@ -13,7 +13,11 @@ const DefaultModel = DefaultOpenAIModel
 // $MEAT_MODEL, then DefaultModel. It performs no network or credential work, so
 // callers can resolve the cache identity cheaply and offline.
 func ResolveModel(model string) string {
-	return resolveModel(model, DefaultModel)
+	model = resolveModel(model, DefaultModel)
+	if model == CodexModel || model == CodexModel+"/" {
+		return CodexModel + "/" + DefaultModel
+	}
+	return model
 }
 
 func resolveModel(model, fallback string) string {
@@ -27,13 +31,21 @@ func resolveModel(model, fallback string) string {
 }
 
 // NewModelFromEnv constructs the built-in backend appropriate for model.
-// Claude model IDs use Anthropic Messages; all other IDs use OpenAI Responses.
+// "codex" selectors use the subscription-authenticated Codex CLI, Claude model
+// IDs use Anthropic Messages, and all other IDs use OpenAI Responses.
 func NewModelFromEnv(ctx context.Context, model string) (Model, error) {
 	model = ResolveModel(model)
+	if isCodexModel(model) {
+		return NewCodexCLIFromEnv(ctx, model)
+	}
 	if isAnthropicModel(model) {
 		return NewAnthropicFromEnv(ctx, model)
 	}
 	return NewOpenAIFromEnv(ctx, model)
+}
+
+func isCodexModel(model string) bool {
+	return model == CodexModel || strings.HasPrefix(model, CodexModel+"/")
 }
 
 func isAnthropicModel(model string) bool {

@@ -168,12 +168,33 @@ func surfaceOversizeDiff() string {
 	return b.String()
 }
 
-// RubricHash returns a short content hash of the complete abridging protocol:
-// every static string the model can see, rendered through the real builders,
-// plus the protocol version. Callers that cache Abridge results should mix it
-// into their cache key.
+// RubricHash returns a short content hash of the shared abridging protocol:
+// every provider-independent static string the model can see, rendered through
+// the real builders, plus the protocol version.
 func RubricHash() string {
-	h := sha256.Sum256([]byte(promptSurface()))
+	return shortProtocolHash(promptSurface())
+}
+
+// CacheProtocolHash returns the cache protocol identity for a resolved model
+// selector. Codex selectors additionally include the adapter's rendered wrapper,
+// wire serialization, and response schema; other providers retain RubricHash.
+func CacheProtocolHash(model string) string {
+	if !isCodexModel(model) {
+		return RubricHash()
+	}
+	return cacheProtocolHash(model, codexProtocolSurface())
+}
+
+func cacheProtocolHash(model, codexSurface string) string {
+	surface := promptSurface()
+	if isCodexModel(model) {
+		surface += "\x00codex-adapter\x00" + codexSurface
+	}
+	return shortProtocolHash(surface)
+}
+
+func shortProtocolHash(surface string) string {
+	h := sha256.Sum256([]byte(surface))
 	return hex.EncodeToString(h[:8])
 }
 

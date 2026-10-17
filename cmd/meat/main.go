@@ -24,8 +24,8 @@
 //	git show <sha> | meat
 //	git diff main...HEAD | meat
 //
-// It reads OPENAI_API_KEY or ANTHROPIC_API_KEY from the environment
-// (optionally the matching provider base URL, plus MEAT_MODEL / -model).
+// It uses OPENAI_API_KEY, ANTHROPIC_API_KEY, or a ChatGPT-authenticated Codex
+// CLI selected with -model codex (plus provider base URLs and MEAT_MODEL).
 package main
 
 import (
@@ -56,16 +56,18 @@ meat reads a unified diff (from stdin, from a named revision or range, or HEAD
 when stdin is a terminal), asks an LLM to drop everything not worth reading, and
 prints the abridged diff plus a one-line summary.
 
-Results are cached under ~/.meat keyed by the SHA of (rubric/compiler protocol +
-model + diff contents), so re-running on an unchanged diff is instant; editing
-the diff, switching models, or upgrading meat's rubric or compiler invariants
-recomputes.
+Results are cached under ~/.meat keyed by the SHA of (rubric/compiler/provider
+protocol + model + diff contents), so re-running on an unchanged diff is
+instant; editing the diff, switching models, or upgrading meat's model-visible
+protocol or compiler invariants recomputes.
 
 On an interactive terminal the diff is colored and paged like git show (using
 your git pager and color.diff config); piped/redirected output stays plain.
 
 Flags:
-  -model string   Model to use (default $MEAT_MODEL or a built-in default).
+  -model string   Model/provider to use. Use "codex" or "codex/<model>" for
+                  the locally installed, ChatGPT-authenticated Codex CLI.
+                  Otherwise defaults to $MEAT_MODEL or a built-in model.
   -no-cache       Ignore any cached result and recompute (still updates cache).
   -staged         Read the staged changes (git diff --staged).
   -w              Read the unstaged working-tree changes (git diff).
@@ -77,6 +79,8 @@ Environment:
   OPENAI_BASE_URL      Optional. Override the OpenAI API base URL.
   ANTHROPIC_API_KEY    API key for Claude models.
   ANTHROPIC_BASE_URL   Optional. Override the Anthropic API base URL.
+  CODEX_HOME           Optional. Authentication home used by the Codex CLI.
+                       Requires ChatGPT login.
   MEAT_MODEL           Optional. Default model id.
   MEAT_CACHE           Optional. Cache directory (default ~/.meat; empty disables).
 
@@ -154,10 +158,11 @@ func main() {
 		renderResult(os.Stdout, res, elision)
 	}
 
+	resolvedModel := meat.ResolveModel(*model)
 	opts := runOpts{
 		diff:     diff,
-		model:    meat.ResolveModel(*model),
-		rubric:   meat.RubricHash(),
+		model:    resolvedModel,
+		rubric:   meat.CacheProtocolHash(resolvedModel),
 		cacheDir: cacheDir(),
 		noCache:  *noCache,
 		compute:  compute,
@@ -178,7 +183,7 @@ func main() {
 type runOpts struct {
 	diff     string
 	model    string // already resolved (post $MEAT_MODEL/default)
-	rubric   string // rubric hash, part of the cache key
+	rubric   string // provider-aware protocol hash, part of the cache key
 	cacheDir string
 	noCache  bool
 	// compute produces a fresh result on a cache miss. The real implementation

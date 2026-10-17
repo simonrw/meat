@@ -39,9 +39,18 @@ const defaultMaxTurns = 24
 // diff, or one chunk of a split diff) so a stuck run can't hang forever.
 const defaultBudget = 4 * time.Minute
 
+// defaultCodexBudget keeps the same finite guard for Codex CLI runs while
+// allowing large schema-constrained turns to cross the process boundary. It is
+// equivalent to three ordinary chunk budgets, preserving whole-diff reasoning
+// for inputs that still fit the single-run context limit.
+const defaultCodexBudget = 12 * time.Minute
+
 // abridgeBudget is a variable so deadline/fallback behavior can be tested
 // without waiting for the production budget.
 var abridgeBudget = defaultBudget
+
+// codexAbridgeBudget is independently replaceable by Codex deadline tests.
+var codexAbridgeBudget = defaultCodexBudget
 
 // maxDiffBytes bounds both the raw diff and its numbered form sent to one
 // agent run. The numbered whole diff is sent up front (and re-sent every
@@ -142,7 +151,8 @@ func abridgeOne(ctx context.Context, model Model, req Request, opts runOptions) 
 	}
 
 	callerCtx := ctx
-	ctx, cancel := context.WithTimeout(ctx, abridgeBudget)
+	runBudget := modelAbridgeBudget(model)
+	ctx, cancel := context.WithTimeout(ctx, runBudget)
 	defer cancel()
 
 	tb := &toolbox{root: req.RepoRoot, rawDiff: req.UnifiedDiff, noMoves: opts.chunkRun, moves: opts.chunkMoves}
@@ -170,6 +180,12 @@ func abridgeOne(ctx context.Context, model Model, req Request, opts runOptions) 
 				fallback.InputTokens = inTok
 				fallback.OutputTokens = outTok
 				return fallback, nil
+			}
+			if callerErr := callerCtx.Err(); callerErr != nil {
+				return nil, fmt.Errorf("meat: model generate: caller context: %w (provider error: %v)", callerErr, err)
+			}
+			if runErr := ctx.Err(); runErr != nil {
+				return nil, fmt.Errorf("meat: model generate: agent run exceeded %s: %w (provider error: %v)", runBudget, runErr, err)
 			}
 			return nil, fmt.Errorf("meat: model generate: %w", err)
 		}
@@ -233,6 +249,13 @@ func abridgeOne(ctx context.Context, model Model, req Request, opts runOptions) 
 		return fallback, nil
 	}
 	return nil, fmt.Errorf("meat: agent did not submit within %d turns", maxTurns)
+}
+
+func modelAbridgeBudget(model Model) time.Duration {
+	if _, ok := model.(*CodexCLIModel); ok {
+		return codexAbridgeBudget
+	}
+	return abridgeBudget
 }
 
 // The static model-visible user-prompt fragments. Every string the model can
