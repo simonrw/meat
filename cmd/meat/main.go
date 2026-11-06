@@ -24,8 +24,9 @@
 //	git show <sha> | meat
 //	git diff main...HEAD | meat
 //
-// It uses OPENAI_API_KEY, ANTHROPIC_API_KEY, or a ChatGPT-authenticated Codex
-// CLI selected with -model codex (plus provider base URLs and MEAT_MODEL).
+// It uses OPENAI_API_KEY, ANTHROPIC_API_KEY, a ChatGPT-authenticated Codex CLI
+// selected with -model codex, or a subscription-authenticated Claude Code CLI
+// selected with -model claude (plus provider base URLs and MEAT_MODEL).
 package main
 
 import (
@@ -67,7 +68,10 @@ your git pager and color.diff config); piped/redirected output stays plain.
 Flags:
   -model string   Model/provider to use. Use "codex" or "codex/<model>" for
                   the locally installed, ChatGPT-authenticated Codex CLI.
-                  Otherwise defaults to $MEAT_MODEL or a built-in model.
+                  Use "claude" or "claude/<model>" for the locally installed,
+                  subscription-authenticated Claude Code CLI ("claude" runs
+                  claude-opus-5-5 at high effort).
+                  Defaults to $MEAT_MODEL, then "claude".
   -no-cache       Ignore any cached result and recompute (still updates cache).
   -staged         Read the staged changes (git diff --staged).
   -w              Read the unstaged working-tree changes (git diff).
@@ -75,7 +79,7 @@ Flags:
   -h, --help      Show this help.
 
 Environment:
-  OPENAI_API_KEY       API key for OpenAI models (including the default).
+  OPENAI_API_KEY       API key for OpenAI models.
   OPENAI_BASE_URL      Optional. Override the OpenAI API base URL.
   ANTHROPIC_API_KEY    API key for Claude models.
   ANTHROPIC_BASE_URL   Optional. Override the Anthropic API base URL.
@@ -93,7 +97,7 @@ func main() {
 	fs := flag.NewFlagSet("meat", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	fs.Usage = func() { fmt.Fprint(os.Stderr, usage) }
-	model := fs.String("model", "", "model to use (default $MEAT_MODEL or built-in default)")
+	model := fs.String("model", "", "model to use (default $MEAT_MODEL, then claude)")
 	noCache := fs.Bool("no-cache", false, "ignore any cached result and recompute (still updates the cache)")
 	staged := fs.Bool("staged", false, "read the staged changes (git diff --staged)")
 	worktree := fs.Bool("w", false, "read the unstaged working-tree changes (git diff)")

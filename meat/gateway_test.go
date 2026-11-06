@@ -152,7 +152,7 @@ func TestNewOpenAIFromEnv_PrefersExplicitKey(t *testing.T) {
 	}
 }
 
-func TestNewModelFromEnv_DefaultsToOpenAIThroughGateway(t *testing.T) {
+func TestNewModelFromEnv_OpenAIThroughGateway(t *testing.T) {
 	t.Setenv("OPENAI_API_KEY", "")
 	t.Setenv("OPENAI_BASE_URL", "")
 	t.Setenv("ANTHROPIC_API_KEY", "")
@@ -161,13 +161,13 @@ func TestNewModelFromEnv_DefaultsToOpenAIThroughGateway(t *testing.T) {
 	withMarker(t)
 	withReflection(t, `{"integrations":[{"name":"llm","type":"llm"}]}`)
 
-	model, err := NewModelFromEnv(context.Background(), "")
+	model, err := NewModelFromEnv(context.Background(), DefaultOpenAIModel)
 	if err != nil {
 		t.Fatal(err)
 	}
 	m, ok := model.(*OpenAIModel)
 	if !ok {
-		t.Fatalf("default backend = %T, want *OpenAIModel", model)
+		t.Fatalf("OpenAI backend = %T, want *OpenAIModel", model)
 	}
 	if m.Model != "gpt-5.6-sol" {
 		t.Errorf("Model = %q, want gpt-5.6-sol", m.Model)

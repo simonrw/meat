@@ -20,8 +20,9 @@ func TestResolveModel(t *testing.T) {
 	})
 	t.Run("default when nothing set", func(t *testing.T) {
 		t.Setenv("MEAT_MODEL", "")
-		if got := ResolveModel(""); got != DefaultModel {
-			t.Errorf("ResolveModel(\"\") = %q, want %q", got, DefaultModel)
+		want := ClaudeModel + "/" + DefaultClaudeCLIModel
+		if got := ResolveModel(""); got != want {
+			t.Errorf("ResolveModel(\"\") = %q, want %q", got, want)
 		}
 	})
 }

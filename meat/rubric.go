@@ -176,21 +176,21 @@ func RubricHash() string {
 }
 
 // CacheProtocolHash returns the cache protocol identity for a resolved model
-// selector. Codex selectors additionally include the adapter's rendered wrapper,
-// wire serialization, and response schema; other providers retain RubricHash.
+// selector. CLI selectors (codex, claude) additionally include the adapter's
+// rendered wrapper, wire serialization, and response schema; other providers
+// retain RubricHash.
 func CacheProtocolHash(model string) string {
-	if !isCodexModel(model) {
-		return RubricHash()
+	switch {
+	case isCodexModel(model):
+		return cacheProtocolHash("codex-adapter", cliTurnSurface())
+	case isClaudeCLIModel(model):
+		return cacheProtocolHash("claude-adapter", claudeProtocolSurface())
 	}
-	return cacheProtocolHash(model, codexProtocolSurface())
+	return RubricHash()
 }
 
-func cacheProtocolHash(model, codexSurface string) string {
-	surface := promptSurface()
-	if isCodexModel(model) {
-		surface += "\x00codex-adapter\x00" + codexSurface
-	}
-	return shortProtocolHash(surface)
+func cacheProtocolHash(adapter, adapterSurface string) string {
+	return shortProtocolHash(promptSurface() + "\x00" + adapter + "\x00" + adapterSurface)
 }
 
 func shortProtocolHash(surface string) string {

@@ -39,18 +39,18 @@ const defaultMaxTurns = 24
 // diff, or one chunk of a split diff) so a stuck run can't hang forever.
 const defaultBudget = 4 * time.Minute
 
-// defaultCodexBudget keeps the same finite guard for Codex CLI runs while
+// defaultCLIBudget keeps the same finite guard for Codex and Claude CLI runs while
 // allowing large schema-constrained turns to cross the process boundary. It is
 // equivalent to three ordinary chunk budgets, preserving whole-diff reasoning
 // for inputs that still fit the single-run context limit.
-const defaultCodexBudget = 12 * time.Minute
+const defaultCLIBudget = 12 * time.Minute
 
 // abridgeBudget is a variable so deadline/fallback behavior can be tested
 // without waiting for the production budget.
 var abridgeBudget = defaultBudget
 
-// codexAbridgeBudget is independently replaceable by Codex deadline tests.
-var codexAbridgeBudget = defaultCodexBudget
+// cliAbridgeBudget is independently replaceable by CLI deadline tests.
+var cliAbridgeBudget = defaultCLIBudget
 
 // maxDiffBytes bounds both the raw diff and its numbered form sent to one
 // agent run. The numbered whole diff is sent up front (and re-sent every
@@ -252,8 +252,9 @@ func abridgeOne(ctx context.Context, model Model, req Request, opts runOptions) 
 }
 
 func modelAbridgeBudget(model Model) time.Duration {
-	if _, ok := model.(*CodexCLIModel); ok {
-		return codexAbridgeBudget
+	switch model.(type) {
+	case *CodexCLIModel, *ClaudeCLIModel:
+		return cliAbridgeBudget
 	}
 	return abridgeBudget
 }

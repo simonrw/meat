@@ -7,7 +7,7 @@ import (
 )
 
 // DefaultModel is meat's built-in default model.
-const DefaultModel = DefaultOpenAIModel
+const DefaultModel = ClaudeModel
 
 // ResolveModel applies the CLI model fallback chain: the explicit value, then
 // $MEAT_MODEL, then DefaultModel. It performs no network or credential work, so
@@ -15,7 +15,10 @@ const DefaultModel = DefaultOpenAIModel
 func ResolveModel(model string) string {
 	model = resolveModel(model, DefaultModel)
 	if model == CodexModel || model == CodexModel+"/" {
-		return CodexModel + "/" + DefaultModel
+		return CodexModel + "/" + DefaultOpenAIModel
+	}
+	if model == ClaudeModel || model == ClaudeModel+"/" {
+		return ClaudeModel + "/" + DefaultClaudeCLIModel
 	}
 	return model
 }
@@ -31,12 +34,16 @@ func resolveModel(model, fallback string) string {
 }
 
 // NewModelFromEnv constructs the built-in backend appropriate for model.
-// "codex" selectors use the subscription-authenticated Codex CLI, Claude model
+// "codex" selectors use the subscription-authenticated Codex CLI, "claude"
+// selectors use the subscription-authenticated Claude Code CLI, Claude model
 // IDs use Anthropic Messages, and all other IDs use OpenAI Responses.
 func NewModelFromEnv(ctx context.Context, model string) (Model, error) {
 	model = ResolveModel(model)
 	if isCodexModel(model) {
 		return NewCodexCLIFromEnv(ctx, model)
+	}
+	if isClaudeCLIModel(model) {
+		return NewClaudeCLIFromEnv(ctx, model)
 	}
 	if isAnthropicModel(model) {
 		return NewAnthropicFromEnv(ctx, model)

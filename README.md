@@ -18,6 +18,16 @@ go install github.com/simonrw/meat/cmd/meat@latest
 Run with `meat` to review the latest commit.
 It takes git-looking parameters to pick commits to review.
 
+By default meat uses a Claude subscription (Pro/Max) through [Claude
+Code](https://code.claude.com): install it and run `claude auth login`. meat
+shells out to `claude -p` with no tools, MCP servers, user settings or
+CLAUDE.md files. API-key-authenticated sessions are rejected, and
+`ANTHROPIC_API_KEY` is hidden from the CLI so it uses the subscription.
+
+The default `claude` selector runs `claude-opus-5-5` at high effort. Use
+`claude/<model>` to override the model, for example
+`meat -model claude/claude-sonnet-5-5 main...HEAD`.
+
 To use an existing ChatGPT-authenticated [Codex
 CLI](https://developers.openai.com/codex/cli) session, install Codex, run
 `codex login`, and select the provider explicitly.
@@ -27,7 +37,7 @@ API-key-authenticated Codex sessions are rejected.
 meat -model codex main...HEAD
 ```
 
-The `codex` selector uses meat's built-in default model so cached results remain
+The `codex` selector uses meat's built-in default OpenAI model so cached results remain
 stable. Use `codex/<model>` to override it, for example
 `meat -model codex/gpt-5.6-sol main...HEAD`. Codex runs ephemerally with a
 read-only sandbox; meat retains control of repository reads and its edit-plan
