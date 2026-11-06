@@ -65,7 +65,7 @@ func NewCodexCLIFromEnv(ctx context.Context, model string) (*CodexCLIModel, erro
 		}
 		detail := strings.TrimSpace(string(status))
 		if detail != "" {
-			return nil, fmt.Errorf("check Codex login status: %w: %s", err, truncateCodexError(detail))
+			return nil, fmt.Errorf("check Codex login status: %w: %s", err, truncateCLIError(detail))
 		}
 		return nil, fmt.Errorf("check Codex login status: %w", err)
 	}
@@ -87,7 +87,7 @@ func (m *CodexCLIModel) Generate(ctx context.Context, system string, messages []
 		return nil, err
 	}
 
-	prompt, err := codexPrompt(system, messages, tools)
+	prompt, err := cliTurnPrompt(system, messages, tools)
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +99,7 @@ func (m *CodexCLIModel) Generate(ctx context.Context, system string, messages []
 
 	schemaPath := filepath.Join(workDir, "response-schema.json")
 	outputPath := filepath.Join(workDir, "response.json")
-	if err := os.WriteFile(schemaPath, codexResponseSchema, 0o600); err != nil {
+	if err := os.WriteFile(schemaPath, cliResponseSchema, 0o600); err != nil {
 		return nil, fmt.Errorf("write Codex response schema: %w", err)
 	}
 
@@ -114,7 +114,7 @@ func (m *CodexCLIModel) Generate(ctx context.Context, system string, messages []
 			detail = strings.TrimSpace(string(stdout))
 		}
 		if detail != "" {
-			return nil, fmt.Errorf("codex CLI: %w: %s", err, truncateCodexError(detail))
+			return nil, fmt.Errorf("codex CLI: %w: %s", err, truncateCLIError(detail))
 		}
 		return nil, fmt.Errorf("codex CLI: %w", err)
 	}
@@ -123,7 +123,7 @@ func (m *CodexCLIModel) Generate(ctx context.Context, system string, messages []
 	if err != nil {
 		return nil, fmt.Errorf("read Codex response: %w", err)
 	}
-	content, err := decodeCodexContent(raw, tools)
+	content, err := decodeCLIContent(raw, tools)
 	if err != nil {
 		return nil, err
 	}
@@ -206,136 +206,9 @@ func codexStatusUsesChatGPT(status []byte) bool {
 func codexModelName(model string) string {
 	model = strings.TrimSpace(model)
 	if model == CodexModel || model == CodexModel+"/" {
-		return DefaultModel
+		return DefaultOpenAIModel
 	}
 	return strings.TrimPrefix(model, CodexModel+"/")
-}
-
-type codexTurn struct {
-	System   string         `json:"system"`
-	Messages []codexMessage `json:"messages"`
-	Tools    []Tool         `json:"tools"`
-}
-
-type codexMessage struct {
-	Role    Role         `json:"role"`
-	Content []codexBlock `json:"content"`
-}
-
-type codexBlock struct {
-	Type       string          `json:"type"`
-	Text       string          `json:"text,omitempty"`
-	ID         string          `json:"id,omitempty"`
-	ToolName   string          `json:"tool_name,omitempty"`
-	ToolInput  json.RawMessage `json:"tool_input,omitempty"`
-	ToolUseID  string          `json:"tool_use_id,omitempty"`
-	ToolResult string          `json:"tool_result,omitempty"`
-	ToolError  bool            `json:"tool_error,omitempty"`
-}
-
-const codexPromptInstruction = `Act as exactly one language-model turn for MEAT. Follow the system instruction and conversation in the JSON payload below. Do not execute the advertised tools yourself. To call a tool, return a tool_use block whose tool_input_json is valid JSON matching that tool's input schema. Otherwise return a text block. Return only the schema-constrained response.
-
-MEAT turn payload:
-`
-
-func codexPrompt(system string, messages []Message, tools []Tool) (string, error) {
-	turn := codexTurn{System: system, Tools: tools}
-	for _, message := range messages {
-		converted := codexMessage{Role: message.Role}
-		for _, block := range message.Content {
-			if block.Type == "provider_state" {
-				continue
-			}
-			converted.Content = append(converted.Content, codexBlock{
-				Type:       block.Type,
-				Text:       block.Text,
-				ID:         block.ID,
-				ToolName:   block.ToolName,
-				ToolInput:  block.ToolInput,
-				ToolUseID:  block.ToolUseID,
-				ToolResult: block.ToolResult,
-				ToolError:  block.ToolError,
-			})
-		}
-		turn.Messages = append(turn.Messages, converted)
-	}
-	payload, err := json.Marshal(turn)
-	if err != nil {
-		return "", fmt.Errorf("encode Codex turn: %w", err)
-	}
-	return codexPromptInstruction + string(payload), nil
-}
-
-func codexProtocolSurface() string {
-	prompt, err := codexPrompt(
-		"fixture system",
-		[]Message{
-			{Role: RoleUser, Content: []Block{textBlock("fixture user")}},
-			{Role: RoleAssistant, Content: []Block{
-				textBlock("fixture assistant"),
-				{Type: "tool_use", ID: "fixture-call", ToolName: "fixture_tool", ToolInput: json.RawMessage(`{"path":"fixture.go"}`)},
-				{Type: "provider_state", Provider: "fixture", ProviderData: json.RawMessage(`{"opaque":true}`)},
-			}},
-			{Role: RoleUser, Content: []Block{{Type: "tool_result", ToolUseID: "fixture-call", ToolResult: "fixture result", ToolError: true}}},
-		},
-		[]Tool{{Name: "fixture_tool", Description: "Fixture tool.", InputSchema: json.RawMessage(`{"type":"object"}`)}},
-	)
-	if err != nil {
-		panic("meat: codex protocol fixture: " + err.Error())
-	}
-	return prompt + "\x00" + string(codexResponseSchema)
-}
-
-type codexOutput struct {
-	Content []codexOutputBlock `json:"content"`
-}
-
-type codexOutputBlock struct {
-	Type          string `json:"type"`
-	Text          string `json:"text"`
-	ID            string `json:"id"`
-	ToolName      string `json:"tool_name"`
-	ToolInputJSON string `json:"tool_input_json"`
-}
-
-func decodeCodexContent(raw []byte, tools []Tool) ([]Block, error) {
-	var output codexOutput
-	dec := json.NewDecoder(bytes.NewReader(raw))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&output); err != nil {
-		return nil, fmt.Errorf("decode Codex response: %w", err)
-	}
-	if len(output.Content) == 0 {
-		return nil, fmt.Errorf("decode Codex response: empty content")
-	}
-	toolNames := make(map[string]bool, len(tools))
-	for _, tool := range tools {
-		toolNames[tool.Name] = true
-	}
-	content := make([]Block, 0, len(output.Content))
-	for _, block := range output.Content {
-		switch block.Type {
-		case "text":
-			content = append(content, textBlock(block.Text))
-		case "tool_use":
-			if block.ID == "" || !toolNames[block.ToolName] {
-				return nil, fmt.Errorf("decode Codex response: invalid tool call %q", block.ToolName)
-			}
-			input := json.RawMessage(block.ToolInputJSON)
-			if !json.Valid(input) {
-				return nil, fmt.Errorf("decode Codex response: invalid JSON for tool %q", block.ToolName)
-			}
-			content = append(content, Block{
-				Type:      "tool_use",
-				ID:        block.ID,
-				ToolName:  block.ToolName,
-				ToolInput: input,
-			})
-		default:
-			return nil, fmt.Errorf("decode Codex response: unsupported block type %q", block.Type)
-		}
-	}
-	return content, nil
 }
 
 type codexEvent struct {
@@ -370,35 +243,3 @@ func codexUsage(stdout []byte) (int, int, error) {
 	}
 	return inputTokens, outputTokens, nil
 }
-
-func truncateCodexError(message string) string {
-	const max = 4 * 1024
-	if len(message) <= max {
-		return message
-	}
-	return message[:max] + "... (truncated)"
-}
-
-var codexResponseSchema = []byte(`{
-  "type": "object",
-  "additionalProperties": false,
-  "properties": {
-    "content": {
-      "type": "array",
-      "minItems": 1,
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "type": {"type": "string", "enum": ["text", "tool_use"]},
-          "text": {"type": "string"},
-          "id": {"type": "string"},
-          "tool_name": {"type": "string"},
-          "tool_input_json": {"type": "string"}
-        },
-        "required": ["type", "text", "id", "tool_name", "tool_input_json"]
-      }
-    }
-  },
-  "required": ["content"]
-}`)

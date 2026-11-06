@@ -17,7 +17,7 @@ func codexToolResponse(t *testing.T, id, name string, input any) []byte {
 	if err != nil {
 		t.Fatal(err)
 	}
-	response, err := json.Marshal(codexOutput{Content: []codexOutputBlock{{
+	response, err := json.Marshal(cliOutput{Content: []cliOutputBlock{{
 		Type:          "tool_use",
 		ID:            id,
 		ToolName:      name,
@@ -154,37 +154,37 @@ func TestNewModelFromEnv_CodexUsesCLI(t *testing.T) {
 
 func TestResolveModel_CodexPinsBuiltInDefault(t *testing.T) {
 	for _, selector := range []string{"codex", "codex/"} {
-		if got := ResolveModel(selector); got != "codex/"+DefaultModel {
-			t.Errorf("ResolveModel(%q) = %q, want codex/%s", selector, got, DefaultModel)
+		if got := ResolveModel(selector); got != "codex/"+DefaultOpenAIModel {
+			t.Errorf("ResolveModel(%q) = %q, want codex/%s", selector, got, DefaultOpenAIModel)
 		}
 	}
 }
 
 func TestCodexModelName_DefaultSelectors(t *testing.T) {
 	for _, selector := range []string{"codex", "codex/"} {
-		if got := codexModelName(selector); got != DefaultModel {
-			t.Errorf("codexModelName(%q) = %q, want %q", selector, got, DefaultModel)
+		if got := codexModelName(selector); got != DefaultOpenAIModel {
+			t.Errorf("codexModelName(%q) = %q, want %q", selector, got, DefaultOpenAIModel)
 		}
 	}
 }
 
-func TestCacheProtocolHashIncludesOnlyCodexAdapterSurface(t *testing.T) {
+func TestCacheProtocolHash_CLIAdaptersIncludeTheirSurface(t *testing.T) {
 	base := RubricHash()
-	if got := CacheProtocolHash(DefaultModel); got != base {
-		t.Errorf("CacheProtocolHash(non-Codex) = %q, want RubricHash %q", got, base)
+	if got := CacheProtocolHash(DefaultOpenAIModel); got != base {
+		t.Errorf("CacheProtocolHash(non-CLI) = %q, want RubricHash %q", got, base)
 	}
 
-	model := CodexModel + "/" + DefaultModel
-	surface := codexProtocolSurface()
-	codexHash := CacheProtocolHash(model)
-	if codexHash == base {
-		t.Fatal("Codex cache protocol hash does not include the adapter surface")
+	codexHash := CacheProtocolHash(CodexModel + "/" + DefaultOpenAIModel)
+	claudeHash := CacheProtocolHash(ClaudeModel + "/" + DefaultClaudeCLIModel)
+	if codexHash == base || claudeHash == base {
+		t.Fatal("CLI cache protocol hash does not include the adapter surface")
 	}
-	if got := cacheProtocolHash(model, surface+" changed"); got == codexHash {
-		t.Fatal("changing the Codex adapter surface did not change its cache protocol hash")
+	if codexHash == claudeHash {
+		t.Fatal("Codex and Claude adapters share a cache protocol hash")
 	}
-	if got := cacheProtocolHash(DefaultModel, surface+" changed"); got != base {
-		t.Fatal("changing the Codex adapter surface invalidated a non-Codex cache")
+
+	if got := cacheProtocolHash("codex-adapter", cliTurnSurface()+" changed"); got == codexHash {
+		t.Fatal("changing the CLI turn surface did not change the Codex cache protocol hash")
 	}
 }
 
@@ -329,9 +329,9 @@ func TestNewCodexCLIFromEnv_TimesOutLoginStatus(t *testing.T) {
 }
 
 func TestAbridge_CodexInternalDeadlinePreservesCause(t *testing.T) {
-	oldBudget := codexAbridgeBudget
-	codexAbridgeBudget = 20 * time.Millisecond
-	t.Cleanup(func() { codexAbridgeBudget = oldBudget })
+	oldBudget := cliAbridgeBudget
+	cliAbridgeBudget = 20 * time.Millisecond
+	t.Cleanup(func() { cliAbridgeBudget = oldBudget })
 
 	model := &CodexCLIModel{
 		Executable: "codex",
@@ -358,17 +358,17 @@ func TestAbridge_CodexInternalDeadlinePreservesCause(t *testing.T) {
 }
 
 func TestModelAbridgeBudget_CodexGetsExtendedBudget(t *testing.T) {
-	if got := modelAbridgeBudget(&CodexCLIModel{}); got != defaultCodexBudget {
-		t.Errorf("Codex budget = %s, want %s", got, defaultCodexBudget)
+	if got := modelAbridgeBudget(&CodexCLIModel{}); got != defaultCLIBudget {
+		t.Errorf("Codex budget = %s, want %s", got, defaultCLIBudget)
 	}
 	if got := modelAbridgeBudget(&scriptedModel{}); got != defaultBudget {
 		t.Errorf("default budget = %s, want %s", got, defaultBudget)
 	}
 }
 
-func TestDecodeCodexContent_RejectsUnknownTool(t *testing.T) {
+func TestDecodeCLIContent_RejectsUnknownTool(t *testing.T) {
 	raw := codexToolResponse(t, "call-1", "unknown", map[string]any{})
-	_, err := decodeCodexContent(raw, []Tool{{Name: "submit"}})
+	_, err := decodeCLIContent(raw, []Tool{{Name: "submit"}})
 	if err == nil || !strings.Contains(err.Error(), "invalid tool call") {
 		t.Fatalf("error = %v, want invalid tool call", err)
 	}
